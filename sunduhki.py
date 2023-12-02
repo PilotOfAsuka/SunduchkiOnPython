@@ -50,7 +50,7 @@ class SunduchkiGameAI:
         self.deck = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'] * 4
         self.players_hands = defaultdict(list)
         self.sunduchki = defaultdict(int)
-        self.current_player = 0  # 0 - human, 1 - AI
+        self.current_player = 0  # 0 - Человек, 1 - AI
         self.last_asked = None
         self.font = pygame.font.SysFont(None, 36)  # Создаем объект шрифта
         self.need_to_draw_card = False  # Флаг, указывающий, нужно ли брать карту из колоды
