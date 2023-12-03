@@ -43,6 +43,12 @@ class Card:
                 text = self.font.render(self.rank, True, BLACK)
                 text_rect = text.get_rect(center=rect_offset.center)
                 screen.blit(text, text_rect)
+                
+    def draw_at_position(self, x, y):
+        for i in range(self.count):
+            rect_offset = pygame.Rect(x, y - i * STACK_OFFSET, CARD_WIDTH, CARD_HEIGHT)
+            pygame.draw.rect(screen, self.color, rect_offset)
+            pygame.draw.rect(screen, BLACK, rect_offset, 2)  # Черная обводка
 
 # Класс игры
 class SunduchkiGameAI:
@@ -50,13 +56,15 @@ class SunduchkiGameAI:
         self.deck = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'] * 4
         self.players_hands = defaultdict(list)
         self.sunduchki = defaultdict(int)
-        self.current_player = 0  # 0 - Человек, 1 - AI
+        self.current_player = 0  # 0 - human, 1 - AI
         self.last_asked = None
         self.font = pygame.font.SysFont(None, 36)  # Создаем объект шрифта
         self.need_to_draw_card = False  # Флаг, указывающий, нужно ли брать карту из колоды
         self.ai_next_turn_time = 0
         self.ai_turn_interval = 3000  # Интервал в миллисекундах, через который ИИ делает ход
-
+        
+        self.animation_manager = AnimationManager(self)
+        self.animation_manager.start_deal_animation()  # Начинаем анимацию раздачи карт
 
         random.shuffle(self.deck)
 
@@ -106,8 +114,6 @@ class SunduchkiGameAI:
             draw_card_text_render = self.font.render(draw_card_text, True, BLACK)
             screen.blit(draw_card_text_render, (SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2))
 
-
-
     def handle_click(self, pos):
         # Проверяем, кликнул ли игрок на колоду и нужно ли ему брать карту
         if self.current_player == 0 and self.need_to_draw_card:
@@ -155,14 +161,27 @@ class SunduchkiGameAI:
     def check_sunduchki(self, rank):
         if self.players_hands[self.current_player].count(rank) == 4:
             self.sunduchki[self.current_player] += 1
-            # Удаляем собранные сундучки из руки игрока
+
+            # Удаляем собранные карты из руки игрока
             self.players_hands[self.current_player] = [card for card in self.players_hands[self.current_player] if card != rank]
             self.update_cards()
 
 
+
     def ai_turn(self):
         current_time = pygame.time.get_ticks()
-        if self.current_player == 1 and self.deck and current_time >= self.ai_next_turn_time:
+        if self.current_player == 1 and current_time >= self.ai_next_turn_time:
+            # Проверяем, есть ли карты на руках у ИИ
+            if not self.players_hands[1]:
+                # Если у ИИ нет карт, он берет одну из колоды и передает ход игроку
+                if self.deck:
+                    self.players_hands[1].append(self.deck.pop())
+                    self.update_cards()
+                self.current_player = 0  # Передаем ход игроку
+                self.ai_next_turn_time = current_time + self.ai_turn_interval
+                return
+
+            # Выбор и запрос карты
             ai_card = random.choice(self.players_hands[1])
             self.last_asked = ai_card
             self.ask_card(ai_card)
@@ -191,6 +210,39 @@ class SunduchkiGameAI:
         screen.blit(restart_text, restart_text_rect)
         return restart_button
 
+class AnimationManager:
+    def __init__(self, game):
+        self.game = game
+        self.animating_deal = False
+        self.deal_animation_start_time = 0
+        self.deal_animation_duration = 1000  # в миллисекундах
+
+    def start_deal_animation(self):
+        self.animating_deal = True
+        self.deal_animation_start_time = pygame.time.get_ticks()
+        # Предполагаем, что карты уже разданы, но их позиции будут обновлены во время анимации
+        
+    def update_deal_animation(self):
+        if not self.animating_deal:
+            return False
+
+        current_time = pygame.time.get_ticks()
+        if current_time - self.deal_animation_start_time > self.deal_animation_duration:
+            self.animating_deal = False
+            return False
+
+        progress = (current_time - self.deal_animation_start_time) / self.deal_animation_duration
+        for card in self.game.player_cards:  # Обновляем положение каждой карты в руке игрока
+            start_x, start_y = DECK_POS
+            end_x, end_y = card.rect.x, card.rect.y
+            new_x = start_x + (end_x - start_x) * progress
+            new_y = start_y + (end_y - start_y) * progress
+            card.draw_at_position(new_x, new_y)
+
+        return True
+
+
+
 def main():
     game = SunduchkiGameAI()
     clock = pygame.time.Clock()
@@ -210,9 +262,13 @@ def main():
         game.ai_turn()
 
         screen.fill(WHITE)
-        game.draw_cards()
-        if game.check_game_over():
-            restart_button = game.draw_game_over_screen()
+        
+        if game.animation_manager.update_deal_animation():
+            pass  # Анимация раздачи карт активна
+        else:
+            game.draw_cards()
+            if game.check_game_over():
+                restart_button = game.draw_game_over_screen()
         pygame.display.flip()
 
         clock.tick(60)
